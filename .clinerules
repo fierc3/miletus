@@ -1,0 +1,10 @@
+Project
+Miletus is a AI crypto trading software that uses semantic analysis and other scoring
+to make safe investments in the crypto market.
+
+Project Setup
+
+-core 
+-> python based code for the analysis and figuring out what to invest into (no ui)
+-> uses uv for build. main.py is entry point
+
