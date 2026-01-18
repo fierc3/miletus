@@ -1,0 +1,43 @@
+name: Crypto Analysis Bot
+
+on:
+  schedule:
+    # Run every hour at minute 0
+    - cron: '0 * * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+    
+    - name: Set up Python
+      run: uv python install 3.14
+    
+    - name: Install dependencies
+      working-directory: ./core
+      run: uv sync
+    
+    - name: Run crypto analysis
+      working-directory: ./core
+      env:
+        TAVILY_API: ${{ secrets.TAVILY_API }}
+        TELEGRAM_KEY: ${{ secrets.TELEGRAM_KEY }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: uv run python src/main.py
+    
+    - name: Upload results (if CSV enabled)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: crypto-analysis-results-${{ github.run_number }}
+        path: core/*.csv
+        if-no-files-found: ignore

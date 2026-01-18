@@ -1,0 +1,37 @@
+# 🐍 Python Development Standards (2025/26)
+
+## 📂 Project Structure
+- **Layout:** ALWAYS use the `src/` layout.
+  - ✅ Correct: `src/my_package/main.py`
+  - ❌ Incorrect: `my_package/main.py` (root level)
+- **Tests:** Place tests in `tests/` folder at the root (sibling to `src/`).
+
+## 📦 Dependency Management
+- **Tool:** Use `uv` exclusively.
+  - Install: `uv add <package>`
+  - Run: `uv run python -m my_package.main`
+- **Config:** ALL configuration must go into `pyproject.toml`.
+  - Do NOT create `setup.cfg`, `.flake8`, or `requirements.txt`.
+
+## 🏗️ Service Architecture & Injection
+- **Pattern:** Use **Manual Constructor Injection**.
+  - Pass dependencies explicitly in `__init__`.
+  - Avoid global state or "Service Locators".
+- **Implementation:** Services MUST be **Classes**, not standalone functions.
+  - Example: `class UserService:` with `def __init__(self, repo: UserRepository):`.
+- **Interfaces:** Use `typing.Protocol` for abstractions (duck typing), not `abc.ABC`.
+- **Wiring:** Compose the dependency graph in `main.py` (Composition Root).
+  - Do NOT use heavy DI frameworks (like `python-dependency-injector`) unless requested.
+
+## 🧹 Code Style & Imports
+- **Imports:**
+  - USE absolute imports (`from my_package.core import utils`).
+  - AVOID relative imports (`from ..core import utils`).
+  - Circular Deps: Use `if TYPE_CHECKING:` block for import cycles.
+- **Linting:** Assume `ruff` is the linter/formatter.
+  - Imports must be sorted (Standard Lib → Third Party → First Party).
+- **Typing:** Strict Python 3.12+ type hints are mandatory (`def func(a: int) -> str:`).
+
+## shield: Public API
+- Use `__init__.py` files to expose clean APIs.
+- Explicitly define `__all__` variables to control what is exported.
