@@ -85,7 +85,7 @@ def main():
         print("\n📱 Sending Telegram notification...")
         try:
             notifier = TelegramNotifier(
-                bot_token=os.getenv("TELEGRAM_KEY", "8085725326:AAEk49u6E5FkcSy__CCgVUvkZ8j5OQmNlWA"),
+                bot_token=os.getenv("TELEGRAM_KEY"),
                 chat_id=os.getenv("TELEGRAM_CHAT_ID")
             )
             success = notifier.send_crypto_alert_sync(tv_results[:10])  # Send top 10 with sentiment
