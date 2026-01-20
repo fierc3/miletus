@@ -5,6 +5,7 @@ import os
 from tradingview_screener import TradingViewScreener
 from telegram_notifier import TelegramNotifier
 from tavily_crypto_query import TavilyCryptoQuery
+from binance_trader import BinanceTrader
 
 
 def main():
@@ -104,15 +105,102 @@ def main():
             print(f"⚠️  Sentiment analysis skipped: {e}")
             print("    Set TAVILY_API environment variable to enable sentiment analysis")
     
-    # Step 3: Send Telegram notification if results found
-    if tv_results:
-        print("\n📱 Sending Telegram notification...")
+    # Step 3: Execute trades on Binance if trading is enabled
+    trading_enabled = os.getenv("BINANCE_TRADING_ENABLED", "false").lower() == "true"
+    successful_trades = []
+    
+    if tv_results and trading_enabled:
+        print("\n" + "=" * 160)
+        print("Step 3: Executing trades on Binance...")
+        print("-" * 160)
+        
+        try:
+            # Initialize Binance trader
+            trader = BinanceTrader(
+                testnet=True)
+            
+            # Get investment amount from env var (default: $100)
+            usdt_amount = float(os.getenv("BINANCE_TRADE_AMOUNT_USDT", "100"))
+            
+            # Get TP/SL ranges from env vars with defaults
+            tp_min = float(os.getenv("BINANCE_TP_MIN", "5"))
+            tp_max = float(os.getenv("BINANCE_TP_MAX", "15"))
+            sl_min = float(os.getenv("BINANCE_SL_MIN", "2"))
+            sl_max = float(os.getenv("BINANCE_SL_MAX", "5"))
+            
+            print(f"Trading Settings:")
+            print(f"  • Amount per trade: ${usdt_amount} USDT")
+            print(f"  • Take Profit: +{tp_min}% to +{tp_max}%")
+            print(f"  • Stop Loss: -{sl_min}% to -{sl_max}%")
+            print()
+            
+            # Try to trade each crypto in the results list
+            for idx, crypto in enumerate(tv_results):
+                original_symbol = crypto['symbol']
+                
+                # Convert symbol format: "BINANCE:BTCUSDT" or "GATE:WORKUSDT" -> "BTCUSDT"
+                # Remove exchange prefix and any slashes
+                symbol = original_symbol.split(':')[-1].replace('/', '')
+                
+                print(f"🎯 Attempting to trade #{idx + 1}: {symbol}")
+                print(f"   Original Symbol: {original_symbol}")
+                print(f"   Technical Rating: {crypto.get('tech_rating', 'N/A')}")
+                if 'sentiment' in crypto:
+                    print(f"   Sentiment: {crypto['sentiment']}")
+                print()
+                
+                result = trader.place_market_buy_with_tp_sl(
+                    symbol=symbol,
+                    usdt_amount=usdt_amount,
+                    tp_percent_min=tp_min,
+                    tp_percent_max=tp_max,
+                    sl_percent_min=sl_min,
+                    sl_percent_max=sl_max
+                )
+                
+                if result['success']:
+                    print(f"✅ Trade executed successfully!")
+                    print(f"   Entry Price: ${result['entry_price']:.8f}")
+                    print(f"   Quantity: {result['quantity']}")
+                    print(f"   Take Profit: ${result['tp_price']:.8f} (+{result['tp_percent']:.2f}%)")
+                    print(f"   Stop Loss: ${result['sl_price']:.8f} ({result['sl_percent']:.2f}%)")
+                    print()
+                    
+                    # Add to successful trades with full crypto info
+                    successful_trades.append(crypto)
+                else:
+                    print(f"⚠️  Skipping {symbol}: {result['message']}")
+                    print()
+            
+            if successful_trades:
+                print("=" * 160)
+                print(f"✅ Successfully executed {len(successful_trades)} trade(s)")
+                print("=" * 160)
+            else:
+                print("=" * 160)
+                print("⚠️  No trades were executed")
+                print("=" * 160)
+            
+        except ValueError as e:
+            print(f"⚠️  Binance trading disabled: {e}")
+            print("    Set BINANCE_API_KEY and BINANCE_API_SECRET environment variables to enable trading")
+        except Exception as e:
+            print(f"⚠️  Binance trading error: {e}")
+    elif tv_results and not trading_enabled:
+        print("\n" + "=" * 160)
+        print("💡 Binance trading is DISABLED")
+        print("   Set BINANCE_TRADING_ENABLED=true to enable automatic trading")
+        print("=" * 160)
+    
+    # Step 4: Send Telegram notification if successful trades were made
+    if successful_trades:
+        print("\n📱 Sending Telegram notification for successful trades...")
         try:
             notifier = TelegramNotifier(
                 bot_token=os.getenv("TELEGRAM_KEY"),
                 chat_id=os.getenv("TELEGRAM_CHAT_ID")
             )
-            success = notifier.send_crypto_alert_sync(tv_results[:10])  # Send top 10 with sentiment
+            success = notifier.send_crypto_alert_sync(successful_trades)
             if success:
                 print("✅ Telegram notification sent successfully!")
             else:
@@ -121,6 +209,8 @@ def main():
                 print("   curl https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates")
         except Exception as e:
             print(f"⚠️  Telegram notification error: {e}")
+    elif trading_enabled and not successful_trades:
+        print("\n📱 No successful trades to notify about")
     
     print("\n" + "=" * 160)
     print("Analysis complete!")

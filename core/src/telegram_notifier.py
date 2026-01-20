@@ -123,7 +123,9 @@ class TelegramNotifier:
                     # Truncate for Telegram
                     if len(reasoning) > 150:
                         reasoning = reasoning[:147] + "..."
-                    message += f"   _'{reasoning}'_\n"
+                    # Escape Markdown special characters to prevent parsing errors
+                    reasoning = reasoning.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
+                    message += f"   _{reasoning}_\n"
             
             message += "\n"
         
