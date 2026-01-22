@@ -38,3 +38,15 @@
                  @@@@    @@@@@@@@@@    @@@@                 
                      @@@@@@@@  @@@@@@@@                     
 ```
+
+## 📊 Trading Strategy
+
+Miletus uses a multi-layered approach combining technical analysis, AI sentiment, and market conditions.
+
+**See [TRADING_CRITERIA.md](./TRADING_CRITERIA.md) for complete details on how trades are selected.**
+
+### Quick Overview:
+- ✅ Volume > $500K, Technical rating BUY/STRONG_BUY
+- ✅ Positive AI sentiment (Excitement, Hype, Neutral)
+- ✅ Fear & Greed Index ≤ 75 (not overheated)
+- ✅ Risk management: 5-15% TP, 2-5% SL, OCO orders
