@@ -2,8 +2,8 @@ name: Crypto Analysis Bot
 
 on:
   schedule:
-    # Run every hour at minute 0
-    - cron: '0 * * * *'
+    # Run every 2 hours at 17 minutes past the hour
+    - cron: '17 */2 * * *'
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
@@ -29,7 +29,16 @@ jobs:
     - name: Run crypto analysis
       working-directory: ./core
       env:
-        TAVILY_API: ${{ secrets.TAVILY_API }}
+        TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+        BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+        BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+        BINANCE_USE_TESTNET: ${{ secrets.BINANCE_USE_TESTNET }}
+        BINANCE_TRADING_ENABLED: ${{ secrets.BINANCE_TRADING_ENABLED }}
+        BINANCE_TRADE_AMOUNT_USDT: ${{ secrets.BINANCE_TRADE_AMOUNT_USDT }}
+        BINANCE_TP_MIN: ${{ secrets.BINANCE_TP_MIN }}
+        BINANCE_TP_MAX: ${{ secrets.BINANCE_TP_MAX }}
+        BINANCE_SL_MIN: ${{ secrets.BINANCE_SL_MIN }}
+        BINANCE_SL_MAX: ${{ secrets.BINANCE_SL_MAX }}
         TELEGRAM_KEY: ${{ secrets.TELEGRAM_KEY }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       run: uv run python src/main.py

@@ -140,6 +140,7 @@ class BinanceTrader:
         """
         # Check active positions tracker
         if symbol in self.active_positions:
+            print(f"   ℹ️  Found {symbol} in active_positions tracker")
             return True
         
         # Check actual account balance
@@ -154,12 +155,21 @@ class BinanceTrader:
             for balance in account['balances']:
                 if balance['asset'] == base_asset:
                     balance_amount = float(balance['free']) + float(balance['locked'])
-                    # Consider invested if balance > minimum
-                    if balance_amount > symbol_info['filters'].get('min_qty', 0):
-                        return True
+                    
+                    # Only consider it "invested" if the position is worth at least $10
+                    # This avoids false positives from dust amounts
+                    if balance_amount > 0:
+                        current_price = self.get_current_price(symbol)
+                        position_value_usd = balance_amount * current_price
+                        
+                        print(f"   ℹ️  {base_asset} balance: {balance_amount:.8f} (${position_value_usd:.2f})")
+                        
+                        if position_value_usd >= 10.0:  # Minimum $10 position
+                            print(f"   ℹ️  Position value ${position_value_usd:.2f} >= $10 threshold")
+                            return True
             return False
         except Exception as e:
-            print(f"Error checking investment status for {symbol}: {e}")
+            print(f"   ⚠️  Error checking investment status for {symbol}: {e}")
             return True  # Be cautious and assume invested if error
     
     def calculate_tp_sl_prices(self, entry_price: float, 
@@ -289,15 +299,26 @@ class BinanceTrader:
             print(f"Setting TP at ${tp_price:.8f} (+{((tp_price/entry_price - 1) * 100):.2f}%)")
             print(f"Setting SL at ${sl_price:.8f} ({((sl_price/entry_price - 1) * 100):.2f}%)")
             
-            # Place OCO order (Take Profit + Stop Loss)
-            oco_order = self.client.create_oco_order(
-                symbol=symbol,
-                side='SELL',
-                quantity=quantity,
-                price=f"{tp_price:.8f}",  # Take profit limit price
-                stopPrice=f"{sl_price:.8f}",  # Stop loss trigger price
-                stopLimitPrice=f"{sl_price * 0.995:.8f}",  # Stop limit slightly below stop price
-                stopLimitTimeInForce='GTC'
+            # Place OCO order using new Binance API format
+            # OCO = One-Cancels-Other: when TP hits, SL cancels (and vice versa)
+            oco_params = {
+                'symbol': symbol,
+                'side': 'SELL',
+                'quantity': quantity,
+                'aboveType': 'LIMIT_MAKER',
+                'abovePrice': f"{tp_price:.8f}",
+                'belowType': 'STOP_LOSS_LIMIT',
+                'belowPrice': f"{sl_price:.8f}",
+                'belowStopPrice': f"{sl_price:.8f}",
+                'belowTimeInForce': 'GTC'
+            }
+            
+            # Use signed request directly for new OCO format
+            oco_order = self.client._request_api(
+                'post',
+                'orderList/oco',
+                signed=True,
+                data=oco_params
             )
             
             print(f"✅ OCO order placed (TP: ${tp_price:.8f}, SL: ${sl_price:.8f})")
@@ -309,7 +330,7 @@ class BinanceTrader:
                 'tp_price': tp_price,
                 'sl_price': sl_price,
                 'buy_order_id': buy_order['orderId'],
-                'oco_order_id': oco_order['orderListId']
+                'oco_order_id': oco_order.get('orderListId', 'unknown')
             }
             
             return {

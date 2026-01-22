@@ -29,8 +29,6 @@ class TradingViewScreener:
     
     def search_cryptos(self,
                       min_volume_usd: float = 1_000_000,
-                      min_galaxy_score: float = 70,
-                      min_sentiment: float = 70,
                       min_volume_change: float = 10,
                       max_volume_change: float = 500,
                       tech_ratings: List[str] = ["BUY", "STRONG_BUY"],
@@ -98,12 +96,12 @@ class TradingViewScreener:
                 data = response.json()
                 results = self._parse_results(data, tech_ratings)
                 
-                # Filter to only USDT pairs (more reputable)
+                # Filter to only BINANCE USDT pairs (more reputable)
                 filtered_results = []
                 for result in results:
                     symbol = result['symbol']
-                    # Only include USDT pairs, and exclude tokens with underscores (often scam tokens)
-                    if 'USDT' in symbol.upper() and '_' not in symbol:
+                    # Only include Binance USDT pairs, and exclude tokens with underscores (often scam tokens)
+                    if symbol.startswith('BINANCE:') and 'USDT' in symbol.upper() and '_' not in symbol:
                         filtered_results.append(result)
                 
                 return filtered_results[:limit]

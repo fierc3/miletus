@@ -2,10 +2,17 @@
 Main entry point for Miletus crypto trading analysis.
 """
 import os
-from tradingview_screener import TradingViewScreener
+from pathlib import Path
+from dotenv import load_dotenv
+from tradingview_screener_v2 import TradingViewScanner
 from telegram_notifier import TelegramNotifier
 from tavily_crypto_query import TavilyCryptoQuery
 from binance_trader import BinanceTrader
+from fear_greed_index import FearGreedIndex
+
+# Load environment variables from .env file
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 
 def main():
@@ -39,21 +46,44 @@ def main():
     print("=" * 160)
     print()
     
+    # Step 0: Check Fear & Greed Index
+    print("Step 0: Checking market sentiment via Fear & Greed Index...")
+    print("-" * 160)
+    
+    fgi = FearGreedIndex()
+    fear_greed_data = fgi.get_current_index()
+    
+    if fear_greed_data:
+        print(fgi.format_report(fear_greed_data))
+        fear_greed_value = fear_greed_data['value']
+        
+        # Check if market conditions are too extreme (Extreme Greed > 75)
+        if fear_greed_value > 75:
+            print("⚠️  WARNING: Extreme Greed detected!")
+            print("   Market may be overheated. Consider reducing position sizes or waiting.")
+            print()
+    else:
+        print("⚠️  Could not fetch Fear & Greed Index, continuing without it...")
+        fear_greed_value = 50  # Default to neutral if unavailable
+    
+    print("\n" + "=" * 160)
+    
+    # Step 1: Scan TradingView for technical opportunities
     # Step 1: Scan TradingView for technical opportunities
     print("Step 1: Scanning TradingView for technical opportunities...")
     print("-" * 160)
     
-    # Initialize screener without CSV output (can be changed to True if needed)
-    screener = TradingViewScreener(save_to_csv=False)
+    # Initialize new library-based screener
+    screener = TradingViewScanner()
     
     # Scan for cryptocurrencies
     tv_results = screener.scan(
-        min_volume_usd=1_000_000,      # Min $1M volume
-        min_volume_change=10,           # Min +10% volume change
-        max_volume_change=500,          # Max 500% to avoid manipulation
-        tech_ratings=["BUY", "STRONG_BUY"],  # Bullish ratings only
-        limit=100,                      # Fetch up to 100 from API
-        max_results=10,                 # Return only top 10 best results
+        min_volume_usd=500_000,         # Min $500K volume
+        min_volume_change=0,            # No minimum volume change (include all)
+        max_volume_change=500.0,        # Max 500% to avoid manipulation
+        tech_ratings=["BUY", "STRONG_BUY", "NEUTRAL"],  # Include NEUTRAL ratings
+        max_symbols=50,                 # Analyze top 50 pairs by volume
+        max_results=20,                 # Return top 20 results
         verbose=True
     )
     
@@ -116,8 +146,14 @@ def main():
         
         try:
             # Initialize Binance trader
-            trader = BinanceTrader(
-                testnet=True)
+            use_testnet = os.getenv("BINANCE_USE_TESTNET", "true").lower() == "true"
+            trader = BinanceTrader(testnet=use_testnet)
+            
+            if use_testnet:
+                print("⚠️  Using Binance TESTNET (fake money)")
+            else:
+                print("🚨 Using Binance PRODUCTION (REAL MONEY)")
+            print()
             
             # Get investment amount from env var (default: $100)
             usdt_amount = float(os.getenv("BINANCE_TRADE_AMOUNT_USDT", "100"))
@@ -134,52 +170,71 @@ def main():
             print(f"  • Stop Loss: -{sl_min}% to -{sl_max}%")
             print()
             
-            # Try to trade each crypto in the results list
-            for idx, crypto in enumerate(tv_results):
-                original_symbol = crypto['symbol']
-                
-                # Convert symbol format: "BINANCE:BTCUSDT" or "GATE:WORKUSDT" -> "BTCUSDT"
-                # Remove exchange prefix and any slashes
-                symbol = original_symbol.split(':')[-1].replace('/', '')
-                
-                print(f"🎯 Attempting to trade #{idx + 1}: {symbol}")
-                print(f"   Original Symbol: {original_symbol}")
-                print(f"   Technical Rating: {crypto.get('tech_rating', 'N/A')}")
-                if 'sentiment' in crypto:
-                    print(f"   Sentiment: {crypto['sentiment']}")
-                print()
-                
-                result = trader.place_market_buy_with_tp_sl(
-                    symbol=symbol,
-                    usdt_amount=usdt_amount,
-                    tp_percent_min=tp_min,
-                    tp_percent_max=tp_max,
-                    sl_percent_min=sl_min,
-                    sl_percent_max=sl_max
-                )
-                
-                if result['success']:
-                    print(f"✅ Trade executed successfully!")
-                    print(f"   Entry Price: ${result['entry_price']:.8f}")
-                    print(f"   Quantity: {result['quantity']}")
-                    print(f"   Take Profit: ${result['tp_price']:.8f} (+{result['tp_percent']:.2f}%)")
-                    print(f"   Stop Loss: ${result['sl_price']:.8f} ({result['sl_percent']:.2f}%)")
-                    print()
-                    
-                    # Add to successful trades with full crypto info
-                    successful_trades.append(crypto)
-                else:
-                    print(f"⚠️  Skipping {symbol}: {result['message']}")
-                    print()
-            
-            if successful_trades:
+            # Filter 1: Check Fear & Greed Index - skip trading if Extreme Greed
+            if fear_greed_value > 75:
+                print(f"⚠️  Extreme Greed ({fear_greed_value}/100) - Skipping all trades to avoid overheated market")
                 print("=" * 160)
-                print(f"✅ Successfully executed {len(successful_trades)} trade(s)")
+                print("⚠️  No trades were executed due to extreme market conditions")
                 print("=" * 160)
             else:
-                print("=" * 160)
-                print("⚠️  No trades were executed")
-                print("=" * 160)
+                # Filter 2: Only trade cryptos with excitement, hype, or neutral sentiment
+                allowed_sentiments = {'excitement', 'hype', 'neutral'}
+                
+                for idx, crypto in enumerate(tv_results):
+                    original_symbol = crypto['symbol']
+                    
+                    # Check sentiment filter
+                    crypto_sentiment = crypto.get('sentiment', 'unknown')
+                    if crypto_sentiment not in allowed_sentiments:
+                        print(f"⏭️  Skipping #{idx + 1}: {original_symbol} - Sentiment '{crypto_sentiment}' not in allowed list")
+                        continue
+                    
+                    # Convert symbol format: "BINANCE:BTCUSDT" or "GATE:WORKUSDT" -> "BTCUSDT"
+                    # Remove exchange prefix and any slashes
+                    symbol = original_symbol.split(':')[-1].replace('/', '')
+                    
+                    print(f"🎯 Attempting to trade #{idx + 1}: {symbol}")
+                    print(f"   Original Symbol: {original_symbol}")
+                    print(f"   Technical Rating: {crypto.get('tech_rating', 'N/A')}")
+                    if 'sentiment' in crypto:
+                        print(f"   Sentiment: {crypto['sentiment']}")
+                    print()
+                    
+                    result = trader.place_market_buy_with_tp_sl(
+                        symbol=symbol,
+                        usdt_amount=usdt_amount,
+                        tp_percent_min=tp_min,
+                        tp_percent_max=tp_max,
+                        sl_percent_min=sl_min,
+                        sl_percent_max=sl_max
+                    )
+                    
+                    if result['success']:
+                        print(f"✅ Trade executed successfully!")
+                        print(f"   Entry Price: ${result['entry_price']:.8f}")
+                        print(f"   Quantity: {result['quantity']}")
+                        print(f"   Take Profit: ${result['tp_price']:.8f} (+{result['tp_percent']:.2f}%)")
+                        print(f"   Stop Loss: ${result['sl_price']:.8f} ({result['sl_percent']:.2f}%)")
+                        print()
+                        
+                        # Merge crypto info with trade result for Telegram notification
+                        trade_info = {
+                            **crypto,  # Include TradingView data (sentiment, rating, etc.)
+                            **result   # Add trade execution data (entry_price, quantity, tp, sl)
+                        }
+                        successful_trades.append(trade_info)
+                    else:
+                        print(f"⚠️  Skipping {symbol}: {result['message']}")
+                        print()
+                
+                if successful_trades:
+                    print("=" * 160)
+                    print(f"✅ Successfully executed {len(successful_trades)} trade(s)")
+                    print("=" * 160)
+                else:
+                    print("=" * 160)
+                    print("⚠️  No trades were executed")
+                    print("=" * 160)
             
         except ValueError as e:
             print(f"⚠️  Binance trading disabled: {e}")

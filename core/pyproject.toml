@@ -8,6 +8,7 @@ dependencies = [
     "ccxt>=4.5.33",
     "pandas>=2.3.3",
     "python-binance>=1.0.19",
+    "python-dotenv>=1.0.0",
     "python-telegram-bot>=22.5",
     "tavily-python>=0.7.19",
     "tradingview-ta>=3.3.0",

@@ -71,7 +71,7 @@ class TelegramNotifier:
         Format cryptocurrency results for Telegram message.
         
         Args:
-            results: List of cryptocurrency dictionaries from TradingView screener
+            results: List of cryptocurrency dictionaries from trades
             
         Returns:
             Formatted message string
@@ -79,8 +79,8 @@ class TelegramNotifier:
         if not results:
             return "🔍 *Crypto Trading Alert*\n\nNo cryptocurrencies found matching criteria."
         
-        message = "🚀 *Crypto Trading Alert*\n\n"
-        message += f"Found *{len(results)}* promising cryptocurrencies:\n\n"
+        message = "✅ *TRADES EXECUTED*\n\n"
+        message += f"Successfully placed *{len(results)}* trades:\n\n"
         
         sentiment_emojis = {
             'fearful': '😨',
@@ -91,52 +91,41 @@ class TelegramNotifier:
             'unknown': '❓'
         }
         
-        for idx, crypto in enumerate(results[:10], 1):  # Limit to top 10
-            symbol = crypto.get('symbol', 'N/A').replace(':', ' - ')
-            price = crypto.get('price', 0)
-            change_pct = crypto.get('change_pct', 0)
-            volume = crypto.get('volume', 0)
-            volume_change = crypto.get('volume_change', 0)
+        for idx, crypto in enumerate(results, 1):
+            symbol = crypto.get('name', crypto.get('symbol', 'N/A')).replace('USDT', '')
+            entry_price = crypto.get('entry_price', crypto.get('price', 0))
+            quantity = crypto.get('quantity', 0)
+            tp_price = crypto.get('tp_price', 0)
+            sl_price = crypto.get('sl_price', 0)
+            tp_percent = crypto.get('tp_percent', 0)
+            sl_percent = crypto.get('sl_percent', 0)
             tech_rating = crypto.get('tech_rating', 'N/A')
-            rsi = crypto.get('rsi', 0)
             sentiment = crypto.get('sentiment', None)
             
             # Format emoji based on rating
             rating_emoji = "💚" if tech_rating == "STRONG_BUY" else "🟢" if tech_rating == "BUY" else "⚪"
             
+            # Calculate position value
+            position_value = entry_price * quantity if entry_price and quantity else 0
+            
             message += f"{rating_emoji} *{idx}. {symbol}*\n"
-            message += f"   Price: ${price:.6f}\n"
-            message += f"   Change: {change_pct:+.2f}%\n"
-            message += f"   Volume: ${volume:,.0f}\n"
-            message += f"   Vol Change: {volume_change:+.1f}%\n"
-            message += f"   Rating: {tech_rating}\n"
-            message += f"   RSI: {rsi:.1f}\n"
+            message += f"   💰 Entry: ${entry_price:.6f}\n"
+            message += f"   📦 Quantity: {quantity:.2f}\n"
+            message += f"   💵 Position: ${position_value:.2f}\n"
+            message += f"   🎯 TP: ${tp_price:.6f} (+{tp_percent:.1f}%)\n"
+            message += f"   🛑 SL: ${sl_price:.6f} ({sl_percent:.1f}%)\n"
+            message += f"   📊 Rating: {tech_rating}\n"
             
             # Add sentiment if available
             if sentiment:
                 sentiment_emoji = sentiment_emojis.get(sentiment, '❓')
-                message += f"   Sentiment: {sentiment_emoji} {sentiment.upper()}\n"
-                
-                # Add reasoning if available
-                reasoning = crypto.get('sentiment_reasoning', '')
-                if reasoning:
-                    # Truncate for Telegram
-                    if len(reasoning) > 150:
-                        reasoning = reasoning[:147] + "..."
-                    # Escape Markdown special characters to prevent parsing errors
-                    reasoning = reasoning.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
-                    message += f"   _{reasoning}_\n"
+                message += f"   🧠 Sentiment: {sentiment_emoji} {sentiment.upper()}\n"
             
             message += "\n"
         
-        if len(results) > 10:
-            message += f"_...and {len(results) - 10} more_\n\n"
-        
-        message += "📊 *Criteria:*\n"
-        message += "• Volume: > $1M\n"
-        message += "• Vol Change: 10-500%\n"
-        message += "• Rating: BUY/STRONG BUY\n"
-        message += "• Sentiment: News analysis\n"
+        message += "━━━━━━━━━━━━━━━━━\n"
+        message += "💡 Orders are OCO (One-Cancels-Other)\n"
+        message += "When TP hits, SL cancels automatically\n"
         
         return message
     
