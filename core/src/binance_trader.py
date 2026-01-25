@@ -330,10 +330,8 @@ class BinanceTrader:
                 'quantity': actual_quantity,  # Use actual filled quantity
                 'aboveType': 'LIMIT_MAKER',
                 'abovePrice': f"{tp_price:.8f}",
-                'belowType': 'STOP_LOSS_LIMIT',
-                'belowPrice': f"{sl_price:.8f}",
-                'belowStopPrice': f"{sl_price:.8f}",
-                'belowTimeInForce': 'GTC'
+                'belowType': 'STOP_LOSS',  # Market stop loss for guaranteed execution
+                'belowStopPrice': f"{sl_price:.8f}"
             }
             
             # Use signed request directly for new OCO format
