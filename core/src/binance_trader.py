@@ -289,6 +289,23 @@ class BinanceTrader:
             
             print(f"✅ Buy order filled at ${entry_price:.8f}")
             
+            # Get actual balance after buy to ensure we have the exact amount
+            # This prevents "insufficient balance" errors on OCO placement
+            print(f"Checking actual {symbol_info['base_asset']} balance after buy...")
+            account = self.client.get_account()
+            actual_balance = 0
+            for balance in account['balances']:
+                if balance['asset'] == symbol_info['base_asset']:
+                    actual_balance = float(balance['free'])
+                    break
+            
+            if actual_balance > 0:
+                print(f"   Actual balance: {actual_balance} {symbol_info['base_asset']}")
+                # Use the actual balance for OCO (what we really own)
+                actual_quantity = actual_balance
+            else:
+                print(f"   ⚠️ Warning: No free balance found, using filled quantity")
+            
             # Calculate TP and SL prices
             tp_price, sl_price = self.calculate_tp_sl_prices(
                 entry_price, tp_percent_min, tp_percent_max, sl_percent_min, sl_percent_max

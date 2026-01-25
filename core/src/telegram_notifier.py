@@ -66,6 +66,14 @@ class TelegramNotifier:
         """
         return asyncio.run(self.send_message(message, parse_mode))
     
+    def _escape_markdown(self, text: str) -> str:
+        """Escape special Markdown characters for Telegram."""
+        # Escape Markdown V1 special characters
+        chars_to_escape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        for char in chars_to_escape:
+            text = text.replace(char, f'\\{char}')
+        return text
+    
     def format_crypto_results(self, results: List[Dict]) -> str:
         """
         Format cryptocurrency results for Telegram message.
@@ -101,6 +109,7 @@ class TelegramNotifier:
             sl_percent = crypto.get('sl_percent', 0)
             tech_rating = crypto.get('tech_rating', 'N/A')
             sentiment = crypto.get('sentiment', None)
+            is_partial = crypto.get('partial_fill', False)
             
             # Format emoji based on rating
             rating_emoji = "💚" if tech_rating == "STRONG_BUY" else "🟢" if tech_rating == "BUY" else "⚪"
@@ -108,12 +117,21 @@ class TelegramNotifier:
             # Calculate position value
             position_value = entry_price * quantity if entry_price and quantity else 0
             
-            message += f"{rating_emoji} *{idx}. {symbol}*\n"
+            # Escape symbol for markdown
+            safe_symbol = self._escape_markdown(symbol)
+            
+            message += f"{rating_emoji} *{idx}\\. {safe_symbol}*\n"
             message += f"   💰 Entry: ${entry_price:.6f}\n"
             message += f"   📦 Quantity: {quantity:.2f}\n"
             message += f"   💵 Position: ${position_value:.2f}\n"
-            message += f"   🎯 TP: ${tp_price:.6f} (+{tp_percent:.1f}%)\n"
-            message += f"   🛑 SL: ${sl_price:.6f} ({sl_percent:.1f}%)\n"
+            
+            if is_partial:
+                message += f"   ⚠️ PARTIAL FILL \\- OCO FAILED\n"
+                message += f"   ⚠️ Manual TP/SL required\n"
+            else:
+                message += f"   🎯 TP: ${tp_price:.6f} \\(\\+{tp_percent:.1f}%\\)\n"
+                message += f"   🛑 SL: ${sl_price:.6f} \\({sl_percent:.1f}%\\)\n"
+            
             message += f"   📊 Rating: {tech_rating}\n"
             
             # Add sentiment if available
@@ -150,23 +168,27 @@ class TelegramNotifier:
             error_msg = error.get('error', 'Unknown error')
             is_partial = error.get('partial_fill', False)
             
+            # Escape for markdown
+            safe_symbol = self._escape_markdown(symbol)
+            safe_error = self._escape_markdown(error_msg)
+            
             if is_partial:
                 # CRITICAL: Buy succeeded but OCO failed
                 entry_price = error.get('entry_price', 0)
                 quantity = error.get('quantity', 0)
                 buy_order_id = error.get('buy_order_id', 'N/A')
                 
-                message += f"🚨 *{idx}. {symbol}* - CRITICAL\n"
+                message += f"🚨 *{idx}\\. {safe_symbol}* \\- CRITICAL\n"
                 message += f"   ⚠️ BUY SUCCEEDED but OCO FAILED\n"
                 message += f"   💰 Entry: ${entry_price:.6f}\n"
                 message += f"   📦 Quantity: {quantity:.2f}\n"
                 message += f"   🆔 Order ID: {buy_order_id}\n"
-                message += f"   ❌ Error: {error_msg}\n"
-                message += f"   ⚠️ POSITION UNPROTECTED - Manual intervention required!\n"
+                message += f"   ❌ Error: {safe_error}\n"
+                message += f"   ⚠️ POSITION UNPROTECTED \\- Manual intervention required\\!\n"
             else:
                 # Normal failure (buy didn't execute)
-                message += f"❌ *{idx}. {symbol}*\n"
-                message += f"   Error: {error_msg}\n"
+                message += f"❌ *{idx}\\. {safe_symbol}*\n"
+                message += f"   Error: {safe_error}\n"
             
             message += "\n"
         

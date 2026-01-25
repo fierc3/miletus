@@ -246,10 +246,33 @@ def main():
                             'quantity': result.get('quantity')
                         }
                         failed_trades.append(failed_info)
+                        
+                        # If partial fill (buy succeeded), also add to successful trades for logging
+                        if result.get('partial_fill', False):
+                            partial_trade_info = {
+                                **crypto,
+                                'symbol': symbol,
+                                'entry_price': result.get('entry_price'),
+                                'quantity': result.get('quantity'),
+                                'tp_price': 0,  # No TP/SL since OCO failed
+                                'sl_price': 0,
+                                'tp_percent': 0,
+                                'sl_percent': 0,
+                                'partial_fill': True
+                            }
+                            successful_trades.append(partial_trade_info)
                 
                 if successful_trades:
                     print("=" * 160)
-                    print(f"✅ Successfully executed {len(successful_trades)} trade(s)")
+                    # Count actual full successes vs partial fills
+                    full_success = sum(1 for t in successful_trades if not t.get('partial_fill', False))
+                    partial_success = sum(1 for t in successful_trades if t.get('partial_fill', False))
+                    
+                    if partial_success > 0:
+                        print(f"✅ Successfully executed {full_success} trade(s)")
+                        print(f"⚠️  {partial_success} trade(s) partially filled (buy succeeded but OCO failed)")
+                    else:
+                        print(f"✅ Successfully executed {len(successful_trades)} trade(s)")
                     print("=" * 160)
                 else:
                     print("=" * 160)
@@ -275,23 +298,38 @@ def main():
                 chat_id=os.getenv("TELEGRAM_CHAT_ID")
             )
             
-            # Send success notification
-            if successful_trades:
-                print("\n📱 Sending Telegram notification for successful trades...")
-                success = notifier.send_crypto_alert_sync(successful_trades)
-                if success:
-                    print("✅ Telegram notification sent successfully!")
-                else:
-                    print("⚠️  Telegram notification failed. Make sure TELEGRAM_CHAT_ID is set.")
+            # Send both notifications in a single async context to avoid event loop issues
+            import asyncio
             
-            # Send error notification
-            if failed_trades:
-                print("\n🚨 Sending Telegram error notification...")
-                error_success = notifier.send_error_alert_sync(failed_trades)
-                if error_success:
-                    print("✅ Error notification sent successfully!")
-                else:
-                    print("⚠️  Error notification failed.")
+            async def send_all_notifications():
+                results = []
+                
+                if successful_trades:
+                    print("\n📱 Sending Telegram notification for successful trades...")
+                    success = await notifier.send_crypto_alert(successful_trades)
+                    results.append(('success', success))
+                
+                if failed_trades:
+                    print("🚨 Sending Telegram error notification...")
+                    error_success = await notifier.send_error_alert(failed_trades)
+                    results.append(('error', error_success))
+                
+                return results
+            
+            notification_results = asyncio.run(send_all_notifications())
+            
+            # Report results
+            for notif_type, success in notification_results:
+                if notif_type == 'success':
+                    if success:
+                        print("✅ Success notification sent!")
+                    else:
+                        print("⚠️  Success notification failed.")
+                elif notif_type == 'error':
+                    if success:
+                        print("✅ Error notification sent!")
+                    else:
+                        print("⚠️  Error notification failed.")
                     
         except Exception as e:
             print(f"⚠️  Telegram notification error: {e}")
