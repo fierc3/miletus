@@ -138,6 +138,7 @@ def main():
     # Step 3: Execute trades on Binance if trading is enabled
     trading_enabled = os.getenv("BINANCE_TRADING_ENABLED", "false").lower() == "true"
     successful_trades = []
+    failed_trades = []  # Track failed trades for error notifications
     
     if tv_results and trading_enabled:
         print("\n" + "=" * 160)
@@ -177,16 +178,23 @@ def main():
                 print("⚠️  No trades were executed due to extreme market conditions")
                 print("=" * 160)
             else:
-                # Filter 2: Only trade cryptos with excitement, hype, or neutral sentiment
-                allowed_sentiments = {'excitement', 'hype', 'neutral'}
+                # Filter 2: Sentiment filtering based on technical rating
+                # - STRONG_BUY: excitement, hype, OR neutral allowed
+                # - BUY/NEUTRAL: only excitement or hype (neutral sentiment not enough)
                 
                 for idx, crypto in enumerate(tv_results):
                     original_symbol = crypto['symbol']
-                    
-                    # Check sentiment filter
+                    tech_rating = crypto.get('tech_rating', 'NEUTRAL')
                     crypto_sentiment = crypto.get('sentiment', 'unknown')
+                    
+                    # Check sentiment filter based on rating
+                    if tech_rating == 'STRONG_BUY':
+                        allowed_sentiments = {'excitement', 'hype', 'neutral'}
+                    else:  # BUY or NEUTRAL rating
+                        allowed_sentiments = {'excitement', 'hype'}
+                    
                     if crypto_sentiment not in allowed_sentiments:
-                        print(f"⏭️  Skipping #{idx + 1}: {original_symbol} - Sentiment '{crypto_sentiment}' not in allowed list")
+                        print(f"⏭️  Skipping #{idx + 1}: {original_symbol} - {tech_rating} requires {allowed_sentiments} sentiment, got '{crypto_sentiment}'")
                         continue
                     
                     # Convert symbol format: "BINANCE:BTCUSDT" or "GATE:WORKUSDT" -> "BTCUSDT"
@@ -226,6 +234,18 @@ def main():
                     else:
                         print(f"⚠️  Skipping {symbol}: {result['message']}")
                         print()
+                        
+                        # Track failed trade for error notification
+                        failed_info = {
+                            'symbol': symbol,
+                            'original_symbol': original_symbol,
+                            'error': result['message'],
+                            'partial_fill': result.get('partial_fill', False),
+                            'buy_order_id': result.get('buy_order_id'),
+                            'entry_price': result.get('entry_price'),
+                            'quantity': result.get('quantity')
+                        }
+                        failed_trades.append(failed_info)
                 
                 if successful_trades:
                     print("=" * 160)
@@ -247,25 +267,36 @@ def main():
         print("   Set BINANCE_TRADING_ENABLED=true to enable automatic trading")
         print("=" * 160)
     
-    # Step 4: Send Telegram notification if successful trades were made
-    if successful_trades:
-        print("\n📱 Sending Telegram notification for successful trades...")
+    # Step 4: Send Telegram notifications
+    if successful_trades or failed_trades:
         try:
             notifier = TelegramNotifier(
                 bot_token=os.getenv("TELEGRAM_KEY"),
                 chat_id=os.getenv("TELEGRAM_CHAT_ID")
             )
-            success = notifier.send_crypto_alert_sync(successful_trades)
-            if success:
-                print("✅ Telegram notification sent successfully!")
-            else:
-                print("⚠️  Telegram notification failed. Make sure TELEGRAM_CHAT_ID is set.")
-                print("   To get your chat ID, message your bot and run:")
-                print("   curl https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates")
+            
+            # Send success notification
+            if successful_trades:
+                print("\n📱 Sending Telegram notification for successful trades...")
+                success = notifier.send_crypto_alert_sync(successful_trades)
+                if success:
+                    print("✅ Telegram notification sent successfully!")
+                else:
+                    print("⚠️  Telegram notification failed. Make sure TELEGRAM_CHAT_ID is set.")
+            
+            # Send error notification
+            if failed_trades:
+                print("\n🚨 Sending Telegram error notification...")
+                error_success = notifier.send_error_alert_sync(failed_trades)
+                if error_success:
+                    print("✅ Error notification sent successfully!")
+                else:
+                    print("⚠️  Error notification failed.")
+                    
         except Exception as e:
             print(f"⚠️  Telegram notification error: {e}")
-    elif trading_enabled and not successful_trades:
-        print("\n📱 No successful trades to notify about")
+    elif trading_enabled and not successful_trades and not failed_trades:
+        print("\n📱 No trades to notify about")
     
     print("\n" + "=" * 160)
     print("Analysis complete!")

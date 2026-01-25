@@ -129,6 +129,77 @@ class TelegramNotifier:
         
         return message
     
+    def format_error_results(self, errors: List[Dict]) -> str:
+        """
+        Format error results for Telegram message.
+        
+        Args:
+            errors: List of error dictionaries from failed trades
+            
+        Returns:
+            Formatted error message string
+        """
+        if not errors:
+            return "⚠️ *TRADE ERRORS*\n\nNo errors to report."
+        
+        message = "🚨 *TRADE ERRORS*\n\n"
+        message += f"Failed to execute *{len(errors)}* trade(s):\n\n"
+        
+        for idx, error in enumerate(errors, 1):
+            symbol = error.get('symbol', 'N/A').replace('USDT', '')
+            error_msg = error.get('error', 'Unknown error')
+            is_partial = error.get('partial_fill', False)
+            
+            if is_partial:
+                # CRITICAL: Buy succeeded but OCO failed
+                entry_price = error.get('entry_price', 0)
+                quantity = error.get('quantity', 0)
+                buy_order_id = error.get('buy_order_id', 'N/A')
+                
+                message += f"🚨 *{idx}. {symbol}* - CRITICAL\n"
+                message += f"   ⚠️ BUY SUCCEEDED but OCO FAILED\n"
+                message += f"   💰 Entry: ${entry_price:.6f}\n"
+                message += f"   📦 Quantity: {quantity:.2f}\n"
+                message += f"   🆔 Order ID: {buy_order_id}\n"
+                message += f"   ❌ Error: {error_msg}\n"
+                message += f"   ⚠️ POSITION UNPROTECTED - Manual intervention required!\n"
+            else:
+                # Normal failure (buy didn't execute)
+                message += f"❌ *{idx}. {symbol}*\n"
+                message += f"   Error: {error_msg}\n"
+            
+            message += "\n"
+        
+        message += "━━━━━━━━━━━━━━━━━\n"
+        message += "💡 Check logs for more details\n"
+        
+        return message
+    
+    async def send_error_alert(self, errors: List[Dict]) -> bool:
+        """
+        Send error alert for failed trades.
+        
+        Args:
+            errors: List of error dictionaries
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        message = self.format_error_results(errors)
+        return await self.send_message(message)
+    
+    def send_error_alert_sync(self, errors: List[Dict]) -> bool:
+        """
+        Synchronous wrapper for send_error_alert.
+        
+        Args:
+            errors: List of error dictionaries
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        return asyncio.run(self.send_error_alert(errors))
+    
     async def send_crypto_alert(self, results: List[Dict]) -> bool:
         """
         Send cryptocurrency trading alert.

@@ -272,17 +272,20 @@ class BinanceTrader:
                 symbol=symbol,
                 quantity=quantity
             )
+            buy_order_id = buy_order['orderId']  # Save for error reporting
             
             # Wait for order to fill and get actual fill price
             time.sleep(2)
-            order_status = self.client.get_order(symbol=symbol, orderId=buy_order['orderId'])
+            order_status = self.client.get_order(symbol=symbol, orderId=buy_order_id)
             
             # Calculate actual entry price from fills
             entry_price = current_price
+            actual_quantity = quantity  # Default to expected quantity
             if order_status['status'] == 'FILLED' and 'fills' in order_status:
                 total_cost = sum(float(fill['price']) * float(fill['qty']) for fill in order_status['fills'])
                 total_qty = sum(float(fill['qty']) for fill in order_status['fills'])
                 entry_price = total_cost / total_qty if total_qty > 0 else current_price
+                actual_quantity = total_qty  # Use actual filled quantity
             
             print(f"✅ Buy order filled at ${entry_price:.8f}")
             
@@ -296,6 +299,9 @@ class BinanceTrader:
             tp_price = self.round_step_size(tp_price, tick_size)
             sl_price = self.round_step_size(sl_price, tick_size)
             
+            # Round actual quantity to step size for OCO order
+            actual_quantity = self.round_step_size(actual_quantity, symbol_info['filters']['step_size'])
+            
             print(f"Setting TP at ${tp_price:.8f} (+{((tp_price/entry_price - 1) * 100):.2f}%)")
             print(f"Setting SL at ${sl_price:.8f} ({((sl_price/entry_price - 1) * 100):.2f}%)")
             
@@ -304,7 +310,7 @@ class BinanceTrader:
             oco_params = {
                 'symbol': symbol,
                 'side': 'SELL',
-                'quantity': quantity,
+                'quantity': actual_quantity,  # Use actual filled quantity
                 'aboveType': 'LIMIT_MAKER',
                 'abovePrice': f"{tp_price:.8f}",
                 'belowType': 'STOP_LOSS_LIMIT',
@@ -314,19 +320,39 @@ class BinanceTrader:
             }
             
             # Use signed request directly for new OCO format
-            oco_order = self.client._request_api(
-                'post',
-                'orderList/oco',
-                signed=True,
-                data=oco_params
-            )
-            
-            print(f"✅ OCO order placed (TP: ${tp_price:.8f}, SL: ${sl_price:.8f})")
+            try:
+                oco_order = self.client._request_api(
+                    'post',
+                    'orderList/oco',
+                    signed=True,
+                    data=oco_params
+                )
+                print(f"✅ OCO order placed (TP: ${tp_price:.8f}, SL: ${sl_price:.8f})")
+            except Exception as oco_error:
+                # OCO failed but buy succeeded - critical error!
+                print(f"🚨 CRITICAL: Buy order filled but OCO placement failed!")
+                print(f"   Symbol: {symbol}")
+                print(f"   Entry: ${entry_price:.8f}")
+                print(f"   Quantity: {actual_quantity}")
+                print(f"   Buy Order ID: {buy_order_id}")
+                print(f"   OCO Error: {oco_error}")
+                print(f"   ⚠️  POSITION IS UNPROTECTED - Manual intervention required!")
+                
+                return {
+                    'success': False,
+                    'symbol': symbol,
+                    'message': f'Buy succeeded but OCO failed: {oco_error}',
+                    'partial_fill': True,  # Flag that buy succeeded
+                    'buy_order_id': buy_order_id,
+                    'entry_price': entry_price,
+                    'quantity': actual_quantity,
+                    'orders': []
+                }
             
             # Track position
             self.active_positions[symbol] = {
                 'entry_price': entry_price,
-                'quantity': quantity,
+                'quantity': actual_quantity,
                 'tp_price': tp_price,
                 'sl_price': sl_price,
                 'buy_order_id': buy_order['orderId'],
@@ -338,7 +364,7 @@ class BinanceTrader:
                 'symbol': symbol,
                 'message': 'Trade executed successfully',
                 'entry_price': entry_price,
-                'quantity': quantity,
+                'quantity': actual_quantity,
                 'tp_price': tp_price,
                 'sl_price': sl_price,
                 'tp_percent': ((tp_price/entry_price - 1) * 100),
