@@ -55,7 +55,8 @@ class TradingViewScanner:
             {"left": "name", "operation": "nmatch", "right": "BUSD"},
             {"left": "name", "operation": "nmatch", "right": "DAI"},
             {"left": "name", "operation": "nmatch", "right": "DOWN"},
-            {"left": "name", "operation": "nmatch", "right": "UP"}
+            {"left": "name", "operation": "nmatch", "right": "UP"},
+            {"left": "name", "operation": "nmatch", "right": "SEED"}  # Exclude SEED listings (high risk new tokens)
         ]
         
         if min_rvol:
