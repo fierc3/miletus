@@ -1,9 +1,9 @@
 name: Crypto Analysis Bot
 
 on:
-  schedule:
-    # Run every 5 hours at 17 minutes past the hour
-    - cron: '17 */5 * * *'
+  # schedule:
+  #   # Run every 5 hours at 17 minutes past the hour
+  #   - cron: '17 */5 * * *'
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
