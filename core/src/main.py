@@ -243,7 +243,9 @@ def main():
                             'partial_fill': result.get('partial_fill', False),
                             'buy_order_id': result.get('buy_order_id'),
                             'entry_price': result.get('entry_price'),
-                            'quantity': result.get('quantity')
+                            'quantity': result.get('quantity'),
+                            'tp_percent': (tp_min + tp_max) / 2,  # Store TP percentage for reference
+                            'sl_percent': (sl_min + sl_max) / 2   # Store SL percentage for reference
                         }
                         failed_trades.append(failed_info)
                         

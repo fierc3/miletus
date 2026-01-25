@@ -177,14 +177,25 @@ class TelegramNotifier:
                 entry_price = error.get('entry_price', 0)
                 quantity = error.get('quantity', 0)
                 buy_order_id = error.get('buy_order_id', 'N/A')
+                tp_percent = error.get('tp_percent', 10)
+                sl_percent = error.get('sl_percent', 3.5)
+                
+                # Calculate what TP/SL should have been
+                tp_price = entry_price * (1 + tp_percent / 100) if entry_price else 0
+                sl_price = entry_price * (1 - sl_percent / 100) if entry_price else 0
                 
                 message += f"🚨 *{idx}\\. {safe_symbol}* \\- CRITICAL\n"
                 message += f"   ⚠️ BUY SUCCEEDED but OCO FAILED\n"
                 message += f"   💰 Entry: ${entry_price:.6f}\n"
                 message += f"   📦 Quantity: {quantity:.2f}\n"
                 message += f"   🆔 Order ID: {buy_order_id}\n"
+                message += f"   \n"
+                message += f"   *Manual TP/SL needed:*\n"
+                message += f"   🎯 TP: ${tp_price:.6f} \\(\\+{tp_percent:.1f}%\\)\n"
+                message += f"   🛑 SL: ${sl_price:.6f} \\(\\-{sl_percent:.1f}%\\)\n"
+                message += f"   \n"
                 message += f"   ❌ Error: {safe_error}\n"
-                message += f"   ⚠️ POSITION UNPROTECTED \\- Manual intervention required\\!\n"
+                message += f"   ⚠️ Set TP/SL manually ASAP\\!\n"
             else:
                 # Normal failure (buy didn't execute)
                 message += f"❌ *{idx}\\. {safe_symbol}*\n"
