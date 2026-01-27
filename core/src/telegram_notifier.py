@@ -117,8 +117,9 @@ class TelegramNotifier:
             # Calculate position value
             position_value = entry_price * quantity if entry_price and quantity else 0
             
-            # Escape symbol for markdown
+            # Escape all text fields for markdown
             safe_symbol = self._escape_markdown(symbol)
+            safe_rating = self._escape_markdown(tech_rating)
             
             message += f"{rating_emoji} *{idx}\\. {safe_symbol}*\n"
             message += f"   💰 Entry: ${entry_price:.6f}\n"
@@ -132,12 +133,13 @@ class TelegramNotifier:
                 message += f"   🎯 TP: ${tp_price:.6f} \\(\\+{tp_percent:.1f}%\\)\n"
                 message += f"   🛑 SL: ${sl_price:.6f} \\({sl_percent:.1f}%\\)\n"
             
-            message += f"   📊 Rating: {tech_rating}\n"
+            message += f"   📊 Rating: {safe_rating}\n"
             
             # Add sentiment if available
             if sentiment:
                 sentiment_emoji = sentiment_emojis.get(sentiment, '❓')
-                message += f"   🧠 Sentiment: {sentiment_emoji} {sentiment.upper()}\n"
+                safe_sentiment = self._escape_markdown(sentiment.upper())
+                message += f"   🧠 Sentiment: {sentiment_emoji} {safe_sentiment}\n"
             
             message += "\n"
         
