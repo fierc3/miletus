@@ -6,7 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from tradingview_screener_v2 import TradingViewScanner
 from telegram_notifier import TelegramNotifier
-from tavily_crypto_query import TavilyCryptoQuery
+from custom_sentiment_api import LensSentimentAPI
 from binance_trader import BinanceTrader
 from fear_greed_index import FearGreedIndex
 
@@ -98,10 +98,11 @@ def main():
         print("-" * 160)
         
         try:
-            tavily = TavilyCryptoQuery()
+            # Use LENS sentiment API
+            sentiment_api = LensSentimentAPI()
             top_10 = tv_results[:10]
             
-            sentiment_results = tavily.analyze_multiple_cryptos(top_10, verbose=True)
+            sentiment_results = sentiment_api.analyze_multiple_cryptos(top_10, verbose=True)
             
             # Display sentiment results
             print("\n" + "=" * 160)
@@ -133,7 +134,7 @@ def main():
             
         except Exception as e:
             print(f"⚠️  Sentiment analysis skipped: {e}")
-            print("    Set TAVILY_API environment variable to enable sentiment analysis")
+            print("    Make sure LENS API is running at http://192.168.0.73:8765")
     
     # Step 3: Execute trades on Binance if trading is enabled
     trading_enabled = os.getenv("BINANCE_TRADING_ENABLED", "false").lower() == "true"
